@@ -1,0 +1,65 @@
+version: "3.5"
+
+services:
+  dapr-placement:
+    image: "daprio/dapr"
+    command: ["./placement", "-port", "50006"]
+
+  redis-pub: 
+    image: redis
+    depends_on:
+      - dapr-placement
+    restart: always
+    ports:
+      - 5000:5000
+
+  redis-dapr-sidecar:
+    image: "daprio/daprd:edge"
+    command: [
+        "./daprd",
+        "-app-id",
+        "redis-pub",
+        "-app-port",
+        "6379",
+        "-dapr-http-port",
+        "5000",
+        "-components-path",
+        "/components",
+        "-placement-host-address",
+        "dapr-placement:50006"
+      ]
+    volumes: 
+      - "./dapr/components/:/components"
+    depends_on:
+      - redis-pub
+    network_mode: "service:redis-pub" # Attach the redis-dapr-sidecar to the redis-pub network namespace
+
+  nest-sub:
+    build:
+      context: ./
+      dockerfile: ./nest-sub/Dockerfile
+    depends_on:
+      - redis-pub 
+      - dapr-placement 
+    restart: always
+
+  nest-sub-dapr-sidecar:
+    image: "daprio/daprd:edge"
+    command: [
+        "./daprd",
+        "-app-id",
+        "nest-sub",
+        "-app-port",
+        "3000",  
+        "-components-path",
+        "/components",
+        "-placement-host-address",
+        "dapr-placement:50006", 
+      ]
+    volumes:
+      - "./dapr/components/:/components"
+    depends_on:
+      - nest-sub
+    network_mode: "service:nest-sub" # Attach the nest-sub-sidecar to the nest-sub network namespace
+
+
